@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body, html { height: 100%; margin: 0; background-color: #2F2F2F; overflow: hidden; }
+        .camera { position: absolute; width: 100%; height: 100%; left: 0; top: 0; }
+        .line { position: absolute; width: 200%; height: 10px; background-color: #00007f; bottom: 0; }
+        .ball { position: absolute; width: 50px; height: 50px; background-color: #00007f; border: 5px solid gold; border-radius: 50%; left: 50px; bottom: 200px; z-index: 10; }
+        .cube { position: absolute; width: 50px; height: 50px; background-color: magenta; border: 5px solid gold; bottom: 60px; opacity: 0.5; }
+        .platform { position: absolute; width: 200px; height: 10px; background-color: #00007f; left: 50px; bottom: 150px; z-index: 5; }
+        .lives { position: absolute; top: 10px; left: 10px; color: white; font-size: 20px; font-family: Arial, sans-serif; }
+        .game-over { position: absolute; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; font-size: 50px; color: white; display: none; flex-direction: column; }
+        .restart-button { margin-top: 20px; font-size: 20px; padding: 10px 20px; background-color: #00007f; color: white; border: none; cursor: pointer; }
+        .pause-btn { position: absolute; top: 10px; right: 10px; padding: 10px 20px; background-color: #8f0b8f; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
+    </style>
+    <title>Boule et ligne</title>
+</head>
+<body>
+<div class="camera">
+    <div class="line"></div>
+    <div class="platform"></div>
+    <div class="ball"></div>
+</div>
+<div class="lives">Vies : 3</div>
+<div class="game-over">
+    <div>Game Over</div>
+    <button class="restart-button">Recommencer La Partie</button>
+</div>
+<button class="pause-btn" id="pauseBtn">Pause</button>
+<script>
+    const ball = document.querySelector('.ball');
+    const camera = document.querySelector('.camera');
+    const line = document.querySelector('.line');
+    const platform = document.querySelector('.platform');
+    const livesDisplay = document.querySelector('.lives');
+    const gameOverScreen = document.querySelector('.game-over');
+    const restartButton = document.querySelector('.restart-button');
+    const pauseBtn = document.getElementById('pauseBtn');
+    
+    let velocityY = 10; // Initial jump strength
+    let gravity = 0.5;
+    let jumpStrength = 20;
+    let moveSpeed = 8;
+    let jumping = false;
+    let canDoubleJump = true;
+    let keys = {};
+    let ballBottom = 200;
+    let ballLeft = 50;
+    let segmentWidth = window.innerWidth;
+    let lastCube = null;
+    let lives = 3;
+    let onGround = false;
+    let gamePaused = false; // Pause state
+    
+    function detectCollision(ball, rect) {
+        const ballRect = ball.getBoundingClientRect();
+        if ( ballRect.bottom >= rect.top && ballRect.top < rect.top && ballRect.right > rect.left && ballRect.left < rect.right ) {
+            return true;
+        }
+        return false;
+    }
+    
+    function generateCubeSegment(offset) {
+        const cubes = [];
+        let previousCube = null;
+        for (let i = 0; i < 10; i++) {
+            const cube = document.createElement('div');
+            cube.className = 'cube';
+            let randomLeft;
+            if (previousCube) {
+                randomLeft = previousCube.offsetLeft + 100 + Math.random() * 200;
+            } else {
+                randomLeft = offset + 100 + Math.random() * 200;
+            }
+            const randomBottom = 10 + Math.random() * 300;
+            cube.style.left = `${randomLeft}px`;
+            cube.style.bottom = `${randomBottom}px`;
+            camera.appendChild(cube);
+            cubes.push(cube);
+            previousCube = cube;
+        }
+        return cubes;
+    }
+    
+    function extendLine() {
+        const currentWidth = line.offsetWidth;
+        line.style.width = `${currentWidth + window.innerWidth}px`;
+    }
+    
+    function updateLives() {
+        if (lives <= 0) {
+            lives = 0;
+            gameOver();
+        }
+        livesDisplay.textContent = `Vies : ${lives}`;
+    }
+    
+    function gameOver() {
+        gameOverScreen.style.display = 'flex';
+    }
+    
+    function restartGame() {
+        ballBottom = 200;
+        ballLeft = 50;
+        velocityY = 0;
+        lives = 3;
+        updateLives();
+        gameOverScreen.style.display = 'none';
+    }
+    
+    function gameLoop() {
+        if (gamePaused) return; // Check if the game is paused
+        
+        if (keys['Space'] && onGround) {
+            velocityY = jumpStrength;
+            onGround = false;
+            jumping = true;
+            canDoubleJump = true;
+        } else if (keys['Space'] && canDoubleJump) {
+            velocityY = jumpStrength;
+            canDoubleJump = false;
+        }
+        
+        velocityY -= gravity;
+        ballBottom += velocityY;
+        
+        if (ballBottom < 10) {
+            ballBottom = 10;
+            velocityY = 0;
+            jumping = false;
+            lives--;
+            updateLives();
+            if (lives <= 0) {
+                gameOver();
+            } else if (lastCube) {
+                ballLeft = lastCube.offsetLeft;
+                ballBottom = parseFloat(lastCube.style.bottom) + 55;
+            } else {
+                ballLeft = 50;
+            }
+        }
+        
+        if (keys['ArrowLeft'] && ballLeft > 0) {
+            ballLeft -= moveSpeed;
+        }
+        if (keys['ArrowRight']) {
+            ballLeft += moveSpeed;
+        }
+        
+        ball.style.left = `${ballLeft}px`;
+        ball.style.bottom = `${ballBottom}px`;
+        
+        const cubes = document.querySelectorAll('.cube');
+        const platformRect = platform.getBoundingClientRect();
+        if (detectCollision(ball, platformRect) && velocityY <= 0) {
+            ballBottom = parseFloat(platform.style.bottom) + 15;
+            velocityY = 0;
+            jumping = false;
+            lastCube = platform;
+            onGround = true;
+        }
+        
+        cubes.forEach(cube => {
+            const cubeRect = cube.getBoundingClientRect();
+            if (detectCollision(ball, cubeRect) && velocityY <= 0) {
+                ballBottom = parseFloat(cube.style.bottom) + 55;
+                velocityY = 0;
+                jumping = false;
+                lastCube = cube;
+                onGround = true;
+            }
+        });
+        
+        camera.style.transform = `translateX(${-ballLeft + window.innerWidth / 2 - 25}px)`;
+        
+        if (ballLeft > segmentWidth - 200) {
+            generateCubeSegment(segmentWidth);
+            segmentWidth += window.innerWidth;
+            extendLine();
+        }
+        
+        requestAnimationFrame(gameLoop);
+    }
+    
+    document.addEventListener('keydown', (e) => {
+        keys[e.code] = true;
+        if (e.code === 'KeyP') {
+            gamePaused = !gamePaused; // Toggle pause on 'P' key press
+            if (!gamePaused) {
+                gameLoop(); // Resume the game loop if unpaused
+            }
+        }
+    });
+    
+    document.addEventListener('keyup', (e) => {
+        keys[e.code] = false;
+    });
+    
+    restartButton.addEventListener('click', restartGame);
+    
+    pauseBtn.addEventListener('click', function() {
+        if (gamePaused) {
+            gamePaused = false;
+            pauseBtn.textContent = 'Pause';
+            gameLoop(); // Resume the game loop if unpaused
+        } else {
+            gamePaused = true;
+            pauseBtn.textContent = 'Reprendre';
+        }
+    });
+
+    generateCubeSegment(0);
+    updateLives();
+    gameLoop();
+</script>
+</body>
+</html>
+
